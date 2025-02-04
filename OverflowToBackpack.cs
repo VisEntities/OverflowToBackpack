@@ -10,7 +10,7 @@ using System.Collections.Generic;
 namespace Oxide.Plugins
 {
     [Info("Overflow To Backpack", "VisEntities", "1.0.0")]
-    [Description(" ")]
+    [Description("Sends overflow items to your backpack when your inventory is full.")]
     public class OverflowToBackpack : RustPlugin
     {
         #region Fields
