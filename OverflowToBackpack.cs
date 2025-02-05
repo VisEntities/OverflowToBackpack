@@ -9,7 +9,7 @@ using System.Collections.Generic;
 
 namespace Oxide.Plugins
 {
-    [Info("Overflow To Backpack", "VisEntities", "1.0.0")]
+    [Info("Overflow To Backpack", "VisEntities", "1.1.0")]
     [Description("Sends overflow items to your backpack when your inventory is full.")]
     public class OverflowToBackpack : RustPlugin
     {
@@ -35,6 +35,9 @@ namespace Oxide.Plugins
 
             [JsonProperty("Enable Dropped Items")]
             public bool EnableDroppedItems { get; set; }
+            
+            [JsonProperty("Enable Looted Items")]
+            public bool EnableLootedItems { get; set; }
         }
 
         protected override void LoadConfig()
@@ -67,6 +70,11 @@ namespace Oxide.Plugins
             if (string.Compare(_config.Version, "1.0.0") < 0)
                 _config = defaultConfig;
 
+            if (string.Compare(_config.Version, "1.1.0") < 0)
+            {
+                _config.EnableLootedItems = defaultConfig.EnableLootedItems;
+            }
+
             PrintWarning("Config update complete! Updated from version " + _config.Version + " to " + Version.ToString());
             _config.Version = Version.ToString();
         }
@@ -78,7 +86,8 @@ namespace Oxide.Plugins
                 Version = Version.ToString(),
                 EnableGatheredResources = true,
                 EnableCollectibles = true,
-                EnableDroppedItems = true
+                EnableDroppedItems = true,
+                EnableLootedItems = true
             };
         }
 
@@ -102,6 +111,9 @@ namespace Oxide.Plugins
 
             if (!_config.EnableDroppedItems)
                 Unsubscribe(nameof(OnItemPickup));
+
+            if (!_config.EnableLootedItems)
+                Unsubscribe(nameof(CanMoveItem));
         }
 
         private void Unload()
@@ -191,6 +203,28 @@ namespace Oxide.Plugins
 
             int originalAmount = item.amount;
             bool moved = TryMoveItemToBackpack(player, item, originalAmount);
+            if (moved)
+                return true;
+
+            return null;
+        }
+
+        private object CanMoveItem(Item item, PlayerInventory playerInventory)
+        {
+            if (item == null || playerInventory == null)
+                return null;
+
+            BasePlayer player = playerInventory.baseEntity;
+            if (player == null)
+                return null;
+
+            if (!PermissionUtil.HasPermission(player, PermissionUtil.USE))
+                return null;
+
+            if (!PlayerInventoryFull(player))
+                return null;
+
+            bool moved = TryMoveItemToBackpack(player, item, item.amount);
             if (moved)
                 return true;
 
