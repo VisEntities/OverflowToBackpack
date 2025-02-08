@@ -305,7 +305,10 @@ namespace Oxide.Plugins
         private bool TryMoveItemToBackpack(BasePlayer player, Item item, int amount)
         {
             Item backpack = player.inventory.GetBackpackWithInventory();
-            if (backpack == null || backpack.contents.itemList.Count >= backpack.contents.capacity)
+            if (backpack == null)
+                return false;
+
+            if (!ContainerHasSpaceForItem(backpack.contents, item))
                 return false;
 
             bool moved = item.MoveToContainer(backpack.contents, allowStack: true);
