@@ -133,7 +133,7 @@ namespace Oxide.Plugins
             if (!HasBackpack(player))
                 return null;
 
-            if (!PlayerInventoryFull(player))
+            if (!PlayerInventoryFull(player, item))
                 return null;
 
             int originalAmount = item.amount;
@@ -160,7 +160,7 @@ namespace Oxide.Plugins
             if (!HasBackpack(player))
                 return;
 
-            if (!PlayerInventoryFull(player))
+            if (!PlayerInventoryFull(player, item))
                 return;
 
             int originalAmount = item.amount;
@@ -181,7 +181,21 @@ namespace Oxide.Plugins
             if (!HasBackpack(player))
                 return null;
 
-            if (!PlayerInventoryFull(player))
+            bool shouldOverride = false;
+            foreach (var ia in collectible.itemList)
+            {
+                Item tempItem = ItemManager.Create(ia.itemDef, (int)ia.amount, 0UL, true);
+                if (tempItem != null)
+                {
+                    if (PlayerInventoryFull(player, tempItem))
+                    {
+                        shouldOverride = true;
+                    }
+                    tempItem.Remove();
+                }
+            }
+
+            if (!shouldOverride)
                 return null;
 
             foreach (var ia in collectible.itemList)
@@ -210,7 +224,7 @@ namespace Oxide.Plugins
             if (!HasBackpack(player))
                 return null;
 
-            if (!PlayerInventoryFull(player))
+            if (!PlayerInventoryFull(player, item))
                 return null;
 
             int originalAmount = item.amount;
@@ -245,7 +259,7 @@ namespace Oxide.Plugins
             if (isFromPlayerInventory)
                 return null;
 
-            if (!PlayerInventoryFull(player))
+            if (!PlayerInventoryFull(player, item))
                 return null;
 
             bool moved = TryMoveItemToBackpack(player, item, item.amount);
@@ -264,17 +278,30 @@ namespace Oxide.Plugins
             return player.inventory.GetBackpackWithInventory() != null;
         }
 
-        private bool PlayerInventoryFull(BasePlayer player)
+        private bool PlayerInventoryFull(BasePlayer player, Item item)
         {
-            ItemContainer main = player.inventory.containerMain;
-            ItemContainer belt = player.inventory.containerBelt;
+            if (ContainerHasSpaceForItem(player.inventory.containerMain, item))
+                return false;
 
-            bool mainFull = (main == null || main.itemList.Count >= main.capacity);
-            bool beltFull = (belt == null || belt.itemList.Count >= belt.capacity);
-
-            return mainFull && beltFull;
+            if (ContainerHasSpaceForItem(player.inventory.containerBelt, item))
+                return false;
+            return true;
         }
-        
+
+        private bool ContainerHasSpaceForItem(ItemContainer container, Item item)
+        {
+            foreach (Item existing in container.itemList)
+            {
+                if (existing.info == item.info && existing.amount < existing.info.stackable)
+                    return true;
+            }
+
+            if (container.itemList.Count < container.capacity)
+                return true;
+
+            return false;
+        }
+
         private bool TryMoveItemToBackpack(BasePlayer player, Item item, int amount)
         {
             Item backpack = player.inventory.GetBackpackWithInventory();
