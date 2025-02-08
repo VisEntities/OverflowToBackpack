@@ -130,6 +130,9 @@ namespace Oxide.Plugins
             if (!PermissionUtil.HasPermission(player, PermissionUtil.USE))
                 return null;
 
+            if (!HasBackpack(player))
+                return null;
+
             if (!PlayerInventoryFull(player))
                 return null;
 
@@ -154,6 +157,9 @@ namespace Oxide.Plugins
             if (!PermissionUtil.HasPermission(player, PermissionUtil.USE))
                 return;
 
+            if (!HasBackpack(player))
+                return;
+
             if (!PlayerInventoryFull(player))
                 return;
 
@@ -170,6 +176,9 @@ namespace Oxide.Plugins
                 return null;
 
             if (!PermissionUtil.HasPermission(player, PermissionUtil.USE))
+                return null;
+
+            if (!HasBackpack(player))
                 return null;
 
             if (!PlayerInventoryFull(player))
@@ -198,6 +207,9 @@ namespace Oxide.Plugins
             if (!PermissionUtil.HasPermission(player, PermissionUtil.USE))
                 return null;
 
+            if (!HasBackpack(player))
+                return null;
+
             if (!PlayerInventoryFull(player))
                 return null;
 
@@ -221,6 +233,18 @@ namespace Oxide.Plugins
             if (!PermissionUtil.HasPermission(player, PermissionUtil.USE))
                 return null;
 
+            if (!HasBackpack(player))
+                return null;
+
+            ItemContainer sourceContainer = item.parent;
+            bool isFromPlayerInventory = sourceContainer == player.inventory.containerMain ||
+                                         sourceContainer == player.inventory.containerBelt ||
+                                         (player.inventory.GetBackpackWithInventory() != null &&
+                                          sourceContainer == player.inventory.GetBackpackWithInventory().contents);
+
+            if (isFromPlayerInventory)
+                return null;
+
             if (!PlayerInventoryFull(player))
                 return null;
 
@@ -235,6 +259,11 @@ namespace Oxide.Plugins
 
         #region Inventory Utilities
 
+        private bool HasBackpack(BasePlayer player)
+        {
+            return player.inventory.GetBackpackWithInventory() != null;
+        }
+
         private bool PlayerInventoryFull(BasePlayer player)
         {
             ItemContainer main = player.inventory.containerMain;
@@ -245,7 +274,7 @@ namespace Oxide.Plugins
 
             return mainFull && beltFull;
         }
-
+        
         private bool TryMoveItemToBackpack(BasePlayer player, Item item, int amount)
         {
             Item backpack = player.inventory.GetBackpackWithInventory();
