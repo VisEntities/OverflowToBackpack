@@ -9,7 +9,7 @@ using System.Collections.Generic;
 
 namespace Oxide.Plugins
 {
-    [Info("Overflow To Backpack", "VisEntities", "1.1.1")]
+    [Info("Overflow To Backpack", "VisEntities", "1.1.2")]
     [Description("Sends overflow items to your backpack when your inventory is full.")]
     public class OverflowToBackpack : RustPlugin
     {
@@ -166,6 +166,9 @@ namespace Oxide.Plugins
             int originalAmount = item.amount;
             _plugin.NextTick(() =>
             {
+                if (player == null || item == null || !HasBackpack(player))
+                    return;
+
                 bool moved = TryMoveItemToBackpack(player, item, originalAmount);
             });
         }
