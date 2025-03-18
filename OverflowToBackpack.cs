@@ -9,7 +9,7 @@ using System.Collections.Generic;
 
 namespace Oxide.Plugins
 {
-    [Info("Overflow To Backpack", "VisEntities", "1.1.2")]
+    [Info("Overflow To Backpack", "VisEntities", "1.2.0")]
     [Description("Sends overflow items to your backpack when your inventory is full.")]
     public class OverflowToBackpack : RustPlugin
     {
@@ -38,6 +38,9 @@ namespace Oxide.Plugins
             
             [JsonProperty("Enable Looted Items")]
             public bool EnableLootedItems { get; set; }
+
+            [JsonProperty("Send Game Tip Notification")]
+            public bool SendGameTipNotification { get; set; }
         }
 
         protected override void LoadConfig()
@@ -75,6 +78,11 @@ namespace Oxide.Plugins
                 _config.EnableLootedItems = defaultConfig.EnableLootedItems;
             }
 
+            if (string.Compare(_config.Version, "1.2.0") < 0)
+            {
+                _config.SendGameTipNotification = defaultConfig.SendGameTipNotification;
+            }
+
             PrintWarning("Config update complete! Updated from version " + _config.Version + " to " + Version.ToString());
             _config.Version = Version.ToString();
         }
@@ -87,7 +95,8 @@ namespace Oxide.Plugins
                 EnableGatheredResources = true,
                 EnableCollectibles = true,
                 EnableDroppedItems = true,
-                EnableLootedItems = true
+                EnableLootedItems = true,
+                SendGameTipNotification = true
             };
         }
 
@@ -317,7 +326,10 @@ namespace Oxide.Plugins
             bool moved = item.MoveToContainer(backpack.contents, allowStack: true);
             if (moved)
             {
-                ShowToast(player, Lang.BackpackReceived, GameTip.Styles.Blue_Normal, amount, item.info.displayName.translated);
+                if (_config.SendGameTipNotification)
+                {
+                    ShowToast(player, Lang.BackpackReceived, GameTip.Styles.Blue_Normal, amount, item.info.displayName.translated);
+                }
             }
             return moved;
         }
