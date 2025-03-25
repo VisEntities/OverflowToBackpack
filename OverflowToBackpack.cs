@@ -5,11 +5,13 @@
  */
 
 using Newtonsoft.Json;
+using Oxide.Core;
 using System.Collections.Generic;
+using System.IO;
 
 namespace Oxide.Plugins
 {
-    [Info("Overflow To Backpack", "VisEntities", "1.2.0")]
+    [Info("Overflow To Backpack", "VisEntities", "1.3.0")]
     [Description("Sends overflow items to your backpack when your inventory is full.")]
     public class OverflowToBackpack : RustPlugin
     {
@@ -17,6 +19,7 @@ namespace Oxide.Plugins
 
         private static OverflowToBackpack _plugin;
         private static Configuration _config;
+        private StoredData _storedData;
 
         #endregion Fields
 
@@ -41,6 +44,9 @@ namespace Oxide.Plugins
 
             [JsonProperty("Send Game Tip Notification")]
             public bool SendGameTipNotification { get; set; }
+
+            [JsonProperty("Overflow Toggle Chat Command")]
+            public string OverflowToggleChatCommand { get; set; }
         }
 
         protected override void LoadConfig()
@@ -83,6 +89,11 @@ namespace Oxide.Plugins
                 _config.SendGameTipNotification = defaultConfig.SendGameTipNotification;
             }
 
+            if (string.Compare(_config.Version, "1.3.0") < 0)
+            {
+                _config.OverflowToggleChatCommand = defaultConfig.OverflowToggleChatCommand;
+            }
+
             PrintWarning("Config update complete! Updated from version " + _config.Version + " to " + Version.ToString());
             _config.Version = Version.ToString();
         }
@@ -96,11 +107,22 @@ namespace Oxide.Plugins
                 EnableCollectibles = true,
                 EnableDroppedItems = true,
                 EnableLootedItems = true,
-                SendGameTipNotification = true
+                SendGameTipNotification = true,
+                OverflowToggleChatCommand = "overflow"
             };
         }
 
         #endregion Configuration
+
+        #region Stored Data
+
+        public class StoredData
+        {
+            [JsonProperty("Overflow Enabled")]
+            public Dictionary<ulong, bool> OverflowEnabled = new Dictionary<ulong, bool>();
+        }
+
+        #endregion Stored Data
 
         #region Oxide Hooks
 
@@ -108,6 +130,8 @@ namespace Oxide.Plugins
         {
             _plugin = this;
             PermissionUtil.RegisterPermissions();
+            _storedData = DataFileUtil.LoadOrCreate<StoredData>(DataFileUtil.GetFilePath());
+            cmd.AddChatCommand(_config.OverflowToggleChatCommand, this, nameof(cmdToggleOverflow));
 
             if (!_config.EnableGatheredResources)
             {
@@ -136,7 +160,7 @@ namespace Oxide.Plugins
             if (player == null || item == null)
                 return null;
 
-            if (!PermissionUtil.HasPermission(player, PermissionUtil.USE))
+            if (!PermissionUtil.HasPermission(player, PermissionUtil.USE) || !OverflowEnabledFor(player))
                 return null;
 
             if (!HasBackpack(player))
@@ -163,7 +187,7 @@ namespace Oxide.Plugins
             if (player == null || item == null)
                 return;
 
-            if (!PermissionUtil.HasPermission(player, PermissionUtil.USE))
+            if (!PermissionUtil.HasPermission(player, PermissionUtil.USE) || !OverflowEnabledFor(player))
                 return;
 
             if (!HasBackpack(player))
@@ -187,7 +211,7 @@ namespace Oxide.Plugins
             if (player == null || collectible == null || collectible.itemList == null)
                 return null;
 
-            if (!PermissionUtil.HasPermission(player, PermissionUtil.USE))
+            if (!PermissionUtil.HasPermission(player, PermissionUtil.USE) || !OverflowEnabledFor(player))
                 return null;
 
             if (!HasBackpack(player))
@@ -230,7 +254,7 @@ namespace Oxide.Plugins
             if (player == null || item == null)
                 return null;
 
-            if (!PermissionUtil.HasPermission(player, PermissionUtil.USE))
+            if (!PermissionUtil.HasPermission(player, PermissionUtil.USE) || !OverflowEnabledFor(player))
                 return null;
 
             if (!HasBackpack(player))
@@ -256,7 +280,7 @@ namespace Oxide.Plugins
             if (player == null)
                 return null;
 
-            if (!PermissionUtil.HasPermission(player, PermissionUtil.USE))
+            if (!PermissionUtil.HasPermission(player, PermissionUtil.USE) || !OverflowEnabledFor(player))
                 return null;
 
             if (!HasBackpack(player))
@@ -336,6 +360,103 @@ namespace Oxide.Plugins
 
         #endregion Inventory Utilities
 
+        #region Helper Functions
+
+        private bool OverflowEnabledFor(BasePlayer player)
+        {
+            if (!_storedData.OverflowEnabled.TryGetValue(player.userID, out bool isEnabled))
+            {
+                isEnabled = true;
+                _storedData.OverflowEnabled[player.userID] = true;
+                DataFileUtil.Save(DataFileUtil.GetFilePath(), _storedData);
+            }
+            return isEnabled;
+        }
+
+        #endregion Helper Functions
+
+        #region Helper Classes
+
+        public static class DataFileUtil
+        {
+            private const string FOLDER = "";
+
+            public static void EnsureFolderCreated()
+            {
+                string path = Path.Combine(Interface.Oxide.DataDirectory, FOLDER);
+
+                if (!Directory.Exists(path))
+                    Directory.CreateDirectory(path);
+            }
+
+            public static string GetFilePath(string filename = null)
+            {
+                if (filename == null)
+                    filename = _plugin.Name;
+
+                return Path.Combine(FOLDER, filename);
+            }
+
+            public static string[] GetAllFilePaths(bool filenameOnly = false)
+            {
+                string[] filePaths = Interface.Oxide.DataFileSystem.GetFiles(FOLDER);
+
+                for (int i = 0; i < filePaths.Length; i++)
+                {
+                    filePaths[i] = filePaths[i].Substring(0, filePaths[i].Length - 5);
+
+                    if (filenameOnly)
+                    {
+                        filePaths[i] = Path.GetFileName(filePaths[i]);
+                    }
+                }
+                return filePaths;
+            }
+
+            public static bool Exists(string filePath)
+            {
+                return Interface.Oxide.DataFileSystem.ExistsDatafile(filePath);
+            }
+
+            public static T Load<T>(string filePath) where T : class, new()
+            {
+                T data = Interface.Oxide.DataFileSystem.ReadObject<T>(filePath);
+                if (data == null)
+                    data = new T();
+
+                return data;
+            }
+
+            public static T LoadIfExists<T>(string filePath) where T : class, new()
+            {
+                if (Exists(filePath))
+                    return Load<T>(filePath);
+                else
+                    return null;
+            }
+
+            public static T LoadOrCreate<T>(string filePath) where T : class, new()
+            {
+                T data = LoadIfExists<T>(filePath);
+                if (data == null)
+                    data = new T();
+
+                return data;
+            }
+
+            public static void Save<T>(string filePath, T data)
+            {
+                Interface.Oxide.DataFileSystem.WriteObject<T>(filePath, data);
+            }
+
+            public static void Delete(string filePath)
+            {
+                Interface.Oxide.DataFileSystem.DeleteDataFile(filePath);
+            }
+        }
+
+        #endregion Helper Classes
+
         #region Permissions
 
         private static class PermissionUtil
@@ -362,12 +483,43 @@ namespace Oxide.Plugins
 
         #endregion Permissions
 
+        #region Commands
+
+        private void cmdToggleOverflow(BasePlayer player, string command, string[] args)
+        {
+            if (player == null)
+                return;
+
+            if (!PermissionUtil.HasPermission(player, PermissionUtil.USE))
+            {
+                MessagePlayer(player, Lang.NoPermission);
+                return;
+            }
+
+            ulong userId = player.userID;
+
+            bool oldValue = OverflowEnabledFor(player);
+            bool newValue = !oldValue;
+
+            _storedData.OverflowEnabled[userId] = newValue;
+            DataFileUtil.Save(DataFileUtil.GetFilePath(), _storedData);
+
+            if (newValue)
+                MessagePlayer(player, Lang.ToggleOn);
+            else
+                MessagePlayer(player, Lang.ToggleOff);
+        }
+        
+        #endregion Commands
+
         #region Localization
 
         private class Lang
         {
             public const string NoPermission = "NoPermission";
             public const string BackpackReceived = "BackpackReceived";
+            public const string ToggleOn = "ToggleOn";
+            public const string ToggleOff = "ToggleOff";
         }
 
         protected override void LoadDefaultMessages()
@@ -376,6 +528,8 @@ namespace Oxide.Plugins
             {
                 [Lang.NoPermission] = "You do not have permission to use this command.",
                 [Lang.BackpackReceived] = "Your inventory is full! {0} {1} has been moved to your backpack.",
+                [Lang.ToggleOn] = "Overflow to backpack is now enabled.",
+                [Lang.ToggleOff] = "Overflow to backpack is now disabled."
 
             }, this, "en");
         }
