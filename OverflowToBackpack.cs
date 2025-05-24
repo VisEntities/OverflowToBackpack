@@ -8,10 +8,11 @@ using Newtonsoft.Json;
 using Oxide.Core;
 using System.Collections.Generic;
 using System.IO;
+using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Overflow To Backpack", "VisEntities", "1.3.0")]
+    [Info("Overflow To Backpack", "VisEntities", "1.3.1")]
     [Description("Sends overflow items to your backpack when your inventory is full.")]
     public class OverflowToBackpack : RustPlugin
     {
@@ -214,37 +215,72 @@ namespace Oxide.Plugins
             if (!PermissionUtil.HasPermission(player, PermissionUtil.USE) || !OverflowEnabledFor(player))
                 return null;
 
-            if (!HasBackpack(player))
+            Item backpackItem = player.inventory.GetBackpackWithInventory();
+            if (backpackItem == null || backpackItem.contents == null)
                 return null;
 
-            bool shouldOverride = false;
+            ItemContainer backpack = backpackItem.contents;
+
+            bool needOverride = false;
+            int freeSlots = backpack.capacity - backpack.itemList.Count;
+
+            Dictionary<ItemDefinition, int> stackSpace = new Dictionary<ItemDefinition, int>();
+            foreach (Item existing in backpack.itemList)
+            {
+                if (existing.amount >= existing.info.stackable) continue;
+
+                int spare = existing.info.stackable - existing.amount;
+                if (stackSpace.TryGetValue(existing.info, out int current))
+                    stackSpace[existing.info] = current + spare;
+                else
+                    stackSpace.Add(existing.info, spare);
+            }
+
             foreach (var ia in collectible.itemList)
             {
-                Item tempItem = ItemManager.Create(ia.itemDef, (int)ia.amount, 0UL, true);
-                if (tempItem != null)
+                int amount = (int)ia.amount;
+                var itemDef = ia.itemDef;
+
+                Item probe = ItemManager.Create(itemDef, amount, 0UL, true);
+                bool invFull = PlayerInventoryFull(player, probe);
+                probe.Remove();
+
+                if (!invFull)
+                    continue;
+
+                needOverride = true;
+
+                if (stackSpace.TryGetValue(itemDef, out int spareInStacks) && spareInStacks > 0)
                 {
-                    if (PlayerInventoryFull(player, tempItem))
-                    {
-                        shouldOverride = true;
-                    }
-                    tempItem.Remove();
+                    int used = Mathf.Min(spareInStacks, amount);
+                    amount -= used;
+                    stackSpace[itemDef] = spareInStacks - used;
+                }
+
+                if (amount > 0)
+                {
+                    int stackSize = itemDef.stackable;
+                    int slotsNeeded = Mathf.CeilToInt(amount / (float)stackSize);
+
+                    freeSlots -= slotsNeeded;
+                    if (freeSlots < 0)
+                        return null;
                 }
             }
 
-            if (!shouldOverride)
+            if (!needOverride)
                 return null;
 
             foreach (var ia in collectible.itemList)
             {
-                int originalAmount = (int)ia.amount;
-                Item newItem = ItemManager.Create(ia.itemDef, originalAmount, 0UL, true);
-                if (newItem != null)
-                {
-                    bool moved = TryMoveItemToBackpack(player, newItem, originalAmount);
-                    if (!moved)
-                        newItem.Remove();
-                }
+                int amount = (int)ia.amount;
+                Item newItem = ItemManager.Create(ia.itemDef, amount, 0UL, true);
+                if (newItem == null) continue;
+
+                if (!TryMoveItemToBackpack(player, newItem, amount))
+                    newItem.Remove();
             }
+
             collectible.Kill();
             return true;
         }
